@@ -4,7 +4,6 @@ import Applications from '../models/Applications.js';
 import Notification from "../models/Notification.js";
 import Job from '../models/Jobs.js';
 
-// 1. Lấy danh sách đơn ứng tuyển (Lọc theo vai trò)
 router.get("/", async (req, res) => {
   try {
     const { email, role } = req.query;
@@ -14,11 +13,7 @@ router.get("/", async (req, res) => {
       query = { candidateEmail: email };
     } else if (role === 'employer') {
       const myJobs = await Job.find({ postedBy: email });
-
-      if (!myJobs || myJobs.length === 0) {
-        return res.json([]);
-      }
-
+      if (!myJobs || myJobs.length === 0) return res.json([]);
       const myJobIds = myJobs.map(job => job._id);
       query = { jobId: { $in: myJobIds } };
     }
@@ -27,10 +22,10 @@ router.get("/", async (req, res) => {
       .populate('jobId') 
       .sort({ appliedDate: -1 });
     
-    res.json(applications);
+    return res.json(applications); // Trả về kết quả và kết thúc hàm
   } catch (error) {
     console.error("LỖI 500 TẠI ROUTE GET APPLICATIONS:", error);
-    res.status(500).json({ message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 });
 
@@ -55,22 +50,47 @@ router.post("/", async (req, res) => {
       }
     }
 
-    res.status(201).json(savedApp);
+    return res.status(201).json(savedApp);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    return res.status(400).json({ message: error.message });
+  }
+});
+
+router.put("/mark-all-read/:email", async (req, res) => {
+  try {
+    const { email } = req.params;
+    const result = await Notification.updateMany(
+      { recipientEmail: email, isRead: false },
+      { $set: { isRead: true } }
+    );
+    // Trả về kết quả thành công
+    return res.json({ 
+      message: "Đã đánh dấu tất cả là đã đọc", 
+      modifiedCount: result.modifiedCount 
+    });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
   }
 });
 
 router.put("/:id", async (req, res) => {
   try {
-    const application = await Applications.findByIdAndUpdate(req.params.id, req.body, { new: true }).populate('jobId');
+    const application = await Applications.findByIdAndUpdate(
+      req.params.id, 
+      { status: req.body.status }, // Chỉ cập nhật status để tránh ghi đè nhầm
+      { new: true }
+    ).populate('jobId');
     
+    if (!application) {
+      return res.status(404).json({ message: "Không tìm thấy đơn ứng tuyển này" });
+    }
+
     if (req.body.status) {
       const statusText = req.body.status === 'accepted' ? 'được chấp nhận' : 'bị từ chối';
       const updateNoti = await Notification.create({
         recipientEmail: application.candidateEmail,
         title: "Kết quả ứng tuyển",
-        message: `Đơn ứng tuyển vào ${application.jobId?.title} đã ${statusText}.`,
+        message: `Đơn ứng tuyển vào ${application.jobId?.title || 'công việc'} đã ${statusText}.`,
         isRead: false
       });
 
@@ -79,9 +99,11 @@ router.put("/:id", async (req, res) => {
         req.io.to(targetCandidate.socketId).emit("getNotification", updateNoti);
       }
     }
-    res.json(application);
+    
+    return res.json(application); 
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    console.error("Lỗi duyệt đơn:", error);
+    return res.status(400).json({ message: error.message });
   }
 });
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Menu, Button, Avatar, Space, Typography, Badge, Popover, List, notification } from 'antd';
+import { Layout, Menu, Button, Avatar, Space, Typography, Badge, Popover, List, notification, message } from 'antd';
 import { BellOutlined } from '@ant-design/icons';
 import { io } from "socket.io-client";
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -59,22 +59,72 @@ const MainLayout = () => {
     }
   }, [socket]);
 
+  const handleMarkAllAsRead = async () => {
+    if (!user?.email) return;
+    try {
+      const response = await fetch(`http://localhost:5000/api/applications/mark-all-read/${user.email}`, {
+        method: 'PUT'
+      });
+
+      if (response.ok) {
+        setNotifications(prev => prev.map(noti => ({
+          ...noti,
+          isRead: true
+        })));
+        message.success("Đã đọc tất cả thông báo");
+      }
+    } catch (err) {
+      console.error("Lỗi:", err);
+    }
+  };
+
   const notificationContent = (
-  <List
-    size="small"
-    dataSource={notifications}
-    locale={{ emptyText: 'Không có thông báo' }}
-    renderItem={(item) => (
-      <List.Item style={{ cursor: 'pointer', background: item.isRead ? '#fff' : '#f0f5ff', padding: '10px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
-          <Text strong style={{ fontSize: '13px' }}>{item.title}</Text>
-          <Text style={{ fontSize: '12px' }}>{item.message}</Text>
-        </div>
-      </List.Item>
-    )}
-    footer={<Button type="link" size="small" block>Đánh dấu tất cả đã đọc</Button>}
-    style={{ width: 300, maxHeight: 400, overflowY: 'auto' }}
-  />
+  <div style={{ width: 300 }}>
+    <div style={{ 
+      padding: '8px 12px', 
+      borderBottom: '1px solid #f0f0f0', 
+      display: 'flex', 
+      justifyContent: 'space-between', 
+      alignItems: 'center',
+      background: '#fff',
+      position: 'sticky',
+      top: 0,
+      zIndex: 1
+    }}>
+      <Text strong>Thông báo</Text>
+      <Button 
+        type="link" 
+        size="small" 
+        onClick={handleMarkAllAsRead}
+        disabled={!notifications.some(n => !n.isRead)}
+        style={{ padding: 0 }}
+      >
+        Đánh dấu tất cả đã đọc
+      </Button>
+    </div>
+
+    <List
+      size="small"
+      dataSource={notifications}
+      locale={{ emptyText: 'Không có thông báo' }}
+      style={{ maxHeight: 350, overflowY: 'auto' }} 
+      renderItem={(item) => (
+        <List.Item style={{ 
+          cursor: 'pointer', 
+          background: item.isRead ? '#fff' : '#f0f5ff', 
+          padding: '12px',
+          borderBottom: '1px solid #f5f5f5'
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+            <Text strong style={{ fontSize: '13px', color: item.isRead ? '#595959' : '#1890ff' }}>
+              {item.title}
+            </Text>
+            <Text style={{ fontSize: '12px' }}>{item.message}</Text>
+          </div>
+        </List.Item>
+      )}
+    />
+  </div>
 );
 
   const menuItems = {
@@ -132,7 +182,7 @@ const MainLayout = () => {
           <Title level={4} style={{ margin: 0 }}>HỆ THỐNG {user.role?.toUpperCase()}</Title>
           <Space size="large">
             <Popover content={notificationContent} title="Thông báo mới" trigger="click" placement="bottomRight">
-              <Badge count={notifications.filter(n => !n.isRead).length} offset={[10, 0]}>
+              <Badge count={notifications.filter(n => n.isRead === false).length} offset={[10, 0]}>
                 <Button type="text" icon={<BellOutlined style={{ fontSize: '20px' }} />} />
               </Badge>
             </Popover>
@@ -180,4 +230,4 @@ function App() {
   );
 }
 
-export default App;
+export default App; 
